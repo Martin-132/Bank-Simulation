@@ -22,7 +22,9 @@ std::string gen_salt(size_t length = 16){
     return salt;
 }
 
-double Zins = 1.02;
+double Zins;
+double start_purse;
+double start_account;
 
 class Kunde{
     protected:
@@ -209,7 +211,7 @@ Kontoart UI_Kontoart(){
     return Kontoart::Standard;
 } 
 
-void speichern(const std::unordered_map<std::string, Kunde>& ks, const std::unordered_map<std::string, Admin>& ka){
+void speichern(const std::unordered_map<std::string, Kunde>& ks, const std::unordered_map<std::string, Admin>& ka, const double& Zins, const double& s_purse, const double& s_account){
     std::cout<<"Daten werden gespeichert ..."<<std::endl;
     std::ofstream f1("bank_data.txt");
     for (auto const& [key,k]:ks){
@@ -219,6 +221,7 @@ void speichern(const std::unordered_map<std::string, Kunde>& ks, const std::unor
         f1<<k.getName()<<" "<<k.getPurse()<<" "<<k.getID()<<" "<<k.getVal()<<" "<<k.salt<<" "<<k.password_hash<<" "<<t<<"\n";
     }
     f1.close();
+
     std::cout<<"Kunden erfolgreich gespeichert."<<std::endl;
     std::ofstream f2("bank_admins.txt");
     for (auto const& [key,k]:ka){
@@ -228,11 +231,16 @@ void speichern(const std::unordered_map<std::string, Kunde>& ks, const std::unor
         f2<<k.getName()<<" "<<k.getPurse()<<" "<<k.getID()<<" "<<k.getVal()<<" "<<k.salt<<" "<<k.password_hash<<" "<<t<<"\n";
     }
     f2.close();
+
+    std::ofstream f3("bank_settigns.txt");
+    f3<<Zins<<" "<<s_purse<<" "<<s_account;
+    f3.close();
+    std::cout<<"Settings wurden gespeichert."<<std::endl;
     std::cout<<"Admins erfolgreich gespeichert."<<std::endl;
     std::cout<<"Alle Daten wurden gespeichert."<<std::endl;
 }
 
-void laden(std::unordered_map<std::string, Kunde>& ks, std::unordered_map<std::string, Admin>& ka){
+void laden(std::unordered_map<std::string, Kunde>& ks, std::unordered_map<std::string, Admin>& ka, double& Zins, double& s_purse, double& s_account){
     std::cout<<"Daten werden geladen ..."<<std::endl;
 
     std::string name,salt,hash;
@@ -251,6 +259,7 @@ void laden(std::unordered_map<std::string, Kunde>& ks, std::unordered_map<std::s
         if (ID > last_ID) last_ID = ID;
     }
     f1.close();
+
     std::cout<<"Kunden wurden geladen."<<std::endl;
     std::ifstream f2("bank_admins.txt");
     if (!f2.is_open()){return;}
@@ -263,7 +272,13 @@ void laden(std::unordered_map<std::string, Kunde>& ks, std::unordered_map<std::s
         if (ID > last_ID) last_ID = ID;
     }
     f2.close();
+
     std::cout<<"Admins wurden geladen."<<std::endl;
+
+    std::ifstream f3("bank_settings.txt");
+    if (!f3.is_open()){Zins=1.02;s_purse=100;s_account=900;return;}
+    f3>>Zins>>s_purse>>s_account;
+    f3.close();
     std::cout<<"Alle Daten wurden geladen."<<std::endl;
 }
 
@@ -290,10 +305,10 @@ void Konto_erstellen(){
     password_hash = sha256(password+salt);
     password.assign(password.length(), '0');
 
-    purse = 100;
+    purse = start_purse;
     ID = last_ID+1;
     last_ID+=1;
-    val = 1000;
+    val = start_account;
     auto t = std::chrono::system_clock::now();
     std::string login_name;
 
@@ -509,7 +524,7 @@ void login(){
 
 int main(){
     SetConsoleOutputCP(CP_UTF8);
-    laden(Kunden,Admins);
+    laden(Kunden,Admins,Zins,start_purse,start_account);
     std::string programm;
     while(true){
         programm = User_Input<std::string>("Möchtest du dich einloggen[1], ein neues Konto erstellen[2] oder die Simulation verlassen[q] ? ");
@@ -526,6 +541,6 @@ int main(){
             std::cout<<"Keine gültige eingabe, Versuch es nochmal oder drücke [q] zum verlassen."<<std::endl;
         }
     }
-    speichern(Kunden,Admins);
+    speichern(Kunden,Admins,Zins,start_purse,start_account);
     return 0;
 }
