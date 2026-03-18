@@ -22,10 +22,6 @@ std::string gen_salt(size_t length = 16){
     return salt;
 }
 
-double Zins;
-double start_purse;
-double start_account;
-
 class Kunde{
     protected:
         std::string name;
@@ -110,7 +106,7 @@ class Kunde{
             }
         }
 
-        void Zinsen(){
+        void Zinsen(const double& zins){
             auto duration0 = last_login.time_since_epoch();
             int t0 = std::chrono::duration_cast<std::chrono::hours>(duration0).count();
             auto time = std::chrono::system_clock::now();
@@ -118,7 +114,7 @@ class Kunde{
             int t1 = std::chrono::duration_cast<std::chrono::hours>(duration1).count();
             int t = t1-t0;
             double alt_val = val;
-            val = val*std::pow(Zins,t);
+            val = val*std::pow(zins,t);
             std::cout<<"Du hast "<<(val-alt_val)<<"$ Zinsen erhalten."<<std::endl;
         }
 
@@ -131,7 +127,7 @@ class Admin : public Kunde{
         Admin(std::string A_name,double A_purse,int A_ID,double A_val,std::string A_salt,std::string A_hash,std::chrono::time_point<std::chrono::system_clock> A_login)
         : Kunde(A_name,A_purse,A_ID,A_val,A_salt,A_hash,A_login){}
 
-        void edit_value(double Geld){
+        void edit_value(const double& Geld){
             val=Geld;
             std::cout<<"Dein Kontostand wurde auf "<<val<<"$ gesetzt."<<std::endl;
         }
@@ -144,9 +140,9 @@ class Admin : public Kunde{
             std::cout<<"Kunden liste wurde ausgegeben."<<std::endl;
         }
 
-        void edit_zins(double zinssatz){
-            Zins = zinssatz;
-            std::cout<<"Der Zinssatz wurde auf "<<Zins<<" gesetzt."<<std::endl;
+        void edit_zins(const double& zinssatz, double& zins){
+            zins = zinssatz;
+            std::cout<<"Der Zinssatz wurde auf "<<zins<<" gesetzt."<<std::endl;
         }
 };
 
@@ -165,12 +161,6 @@ enum class Kontofunktionen{
     Kunden_liste,
     edit_zins
 };
-
-int last_ID=0;
-std::unordered_map<std::string, Kunde> Kunden;
-std::unordered_map<std::string, Admin> Admins;
-std::string Admin_salt = "f=w@;zLL!0cdz}t>";
-std::string Admin_hash = "ce3ca1b9a01343676efa74af881d940d8327dd9589e4e2f8410fa03a29a495e0";
 
 template <typename T>
 T User_Input(const std::string& question){
@@ -240,7 +230,7 @@ void speichern(const std::unordered_map<std::string, Kunde>& ks, const std::unor
     std::cout<<"Alle Daten wurden gespeichert."<<std::endl;
 }
 
-void laden(std::unordered_map<std::string, Kunde>& ks, std::unordered_map<std::string, Admin>& ka, double& Zins, double& s_purse, double& s_account){
+void laden(std::unordered_map<std::string, Kunde>& ks, std::unordered_map<std::string, Admin>& ka, double& Zins, double& s_purse, double& s_account, int& last_ID){
     std::cout<<"Daten werden geladen ..."<<std::endl;
 
     std::string name,salt,hash;
@@ -282,11 +272,9 @@ void laden(std::unordered_map<std::string, Kunde>& ks, std::unordered_map<std::s
     std::cout<<"Alle Daten wurden geladen."<<std::endl;
 }
 
-void Konto_erstellen(){
+void Konto_erstellen(std::unordered_map<std::string,Kunde>& ks, std::unordered_map<std::string,Admin>& ka, const double& purse, const double& account, int& last_ID, const std::string& Admin_salt, const std::string& Admin_hash){
     std::string name;
-    double purse;
     int ID;
-    double val;
     std::string password_hash;
     std::string password;
     std::string salt;
@@ -305,17 +293,16 @@ void Konto_erstellen(){
     password_hash = sha256(password+salt);
     password.assign(password.length(), '0');
 
-    purse = start_purse;
     ID = last_ID+1;
     last_ID+=1;
-    val = start_account;
+    
     auto t = std::chrono::system_clock::now();
     std::string login_name;
 
     if (kontoart==Kontoart::Standard){
         login_name = name +"_" + std::to_string(ID);
-        Kunde k(name, purse, ID, val, salt, password_hash,t);
-        Kunden[login_name] = k;
+        Kunde k(name, purse, ID, account, salt, password_hash,t);
+        ks[login_name] = k;
     }
     else if (kontoart==Kontoart::Admin){
         std::string User_hash;
@@ -327,24 +314,24 @@ void Konto_erstellen(){
         A_password.assign(A_password.length(),'0');
         if (User_hash==Admin_hash){
             login_name = "A_"+name+"_"+std::to_string(ID);
-            Admin a(name,purse,ID,val,salt,password_hash,t);
-            Admins[login_name] = a;
+            Admin a(name,purse,ID,account,salt,password_hash,t);
+            ka[login_name] = a;
         }
     }
     std::cout<<"Dein Login Name ist: "<<login_name<<std::endl;
 }
 
-bool correct_Password(std::string& password, const std::string& username, const Kontoart& kontoart){
+bool correct_Password(std::string& password, const std::string& username, const Kontoart& kontoart, std::unordered_map<std::string,Kunde>& ks, std::unordered_map<std::string,Admin>& ka){
     std::string salt;
     std::string Kunden_hash;
     std::string User_hash;
     if (kontoart==Kontoart::Standard){
-        Kunde& k = Kunden[username];
+        Kunde& k = ks[username];
         salt = k.salt;
         Kunden_hash = k.password_hash;
     }
     else if(kontoart==Kontoart::Admin){
-        Admin& a = Admins[username];
+        Admin& a = ka[username];
         salt = a.salt;
         Kunden_hash = a.password_hash;
     }
@@ -358,137 +345,126 @@ bool correct_Password(std::string& password, const std::string& username, const 
     }
 }
 
-void Konto(const std::string& username,const Kontoart& kontoart){
-    if (kontoart==Kontoart::Standard){
-        Kunde& k = Kunden[username];
-        k.Zinsen();
-        k.last_login = std::chrono::system_clock::now();
+void Konto(const std::string& username,const Kontoart& kontoart, std::unordered_map<std::string,Kunde>& ks, std::unordered_map<std::string,Admin>& ka, double& Zins){
+    while(true){ 
+        if (kontoart==Kontoart::Standard){
+            Kunde& k = ks[username];
+            k.Zinsen(Zins);
+            k.last_login = std::chrono::system_clock::now();
 
-        int acitivity = User_Input<int>(" Bargeld[1] \n Kontostand[2] \n Geld abheben[3] \n Geld einzahlen[4] \n Geld überweisen[5] \n zum verlassen [6] \n ");
-        Kontofunktionen kontofunktionen = static_cast<Kontofunktionen>(acitivity);
-
-        switch (kontofunktionen){
-            case Kontofunktionen::Bargeld: {
-                k.Bargeld();
-                Konto(username,kontoart);
-                break;
-            }
-            case Kontofunktionen::Kontostand: {
-                k.Kontostand();
-                Konto(username,kontoart);
-                break;
-            }
-            case Kontofunktionen::Geld_abheben:{
-                double Geld = User_Input<double>("Wie viel Geld willst du abheben ? ");
-                k.Geld_abheben(Geld);
-                Konto(username,kontoart);
-                break;
-            }
-            case Kontofunktionen::Geld_einzahlen:{
-                double Geld = User_Input<double>("Wie viel Geld willst du einzahlen ? ");
-                k.Geld_einzahlen(Geld);
-                Konto(username,kontoart);
-                break;
-            }
-            case Kontofunktionen::Überweisen:{
-                double Geld;
-                std::string empfänger_name = User_Input<std::string>("An wen(Name_ID) möchtest du Geld überweisen ? ");
-                if (Kunden.find(empfänger_name)!=Kunden.end()){
-                    Kunde k_em = Kunden[empfänger_name];
-                    Geld = User_Input<double>("Wie viel Geld möchtest du überweisen ? ");
-                    k.überweisen(Kunden,k_em,Geld);
+            int acitivity = User_Input<int>(" Bargeld[1] \n Kontostand[2] \n Geld abheben[3] \n Geld einzahlen[4] \n Geld überweisen[5] \n zum verlassen [6] \n ");
+            Kontofunktionen kontofunktionen = static_cast<Kontofunktionen>(acitivity);
+            
+            switch (kontofunktionen){
+                case Kontofunktionen::Bargeld: {
+                    k.Bargeld();
+                    break;
                 }
-                else{
-                    std::cout<<"Bitte gib einen Gültigen Empfänger ein."<<std::endl;
+                case Kontofunktionen::Kontostand: {
+                    k.Kontostand();
+                    break;
                 }
-                Konto(username,kontoart);
-                break;
+                case Kontofunktionen::Geld_abheben:{
+                    double Geld = User_Input<double>("Wie viel Geld willst du abheben ? ");
+                    k.Geld_abheben(Geld);
+                    break;
+                }
+                case Kontofunktionen::Geld_einzahlen:{
+                    double Geld = User_Input<double>("Wie viel Geld willst du einzahlen ? ");
+                    k.Geld_einzahlen(Geld);
+                    break;
+                }
+                case Kontofunktionen::Überweisen:{
+                    double Geld;
+                    std::string empfänger_name = User_Input<std::string>("An wen(Name_ID) möchtest du Geld überweisen ? ");
+                    if (ks.find(empfänger_name)!=ks.end()){
+                        Kunde k_em = ks[empfänger_name];
+                        Geld = User_Input<double>("Wie viel Geld möchtest du überweisen ? ");
+                        k.überweisen(ks,k_em,Geld);
+                    }
+                    else{
+                        std::cout<<"Bitte gib einen Gültigen Empfänger ein."<<std::endl;
+                    }
+                    break;
+                }
+                default:
+                    return;
+                    break;
             }
-            default:
-                return;
-                break;
         }
-    }
-    else if (kontoart==Kontoart::Admin){
-        Admin& a = Admins[username];
-        a.Zinsen();
-        a.last_login = std::chrono::system_clock::now();
+        else if (kontoart==Kontoart::Admin){
+            Admin& a = ka[username];
+            a.Zinsen(Zins);
+            a.last_login = std::chrono::system_clock::now();
 
-        int acitivity = User_Input<int>(" Bargeld[1] \n Kontostand[2] \n Geld abheben[3] \n Geld einzahlen[4] \n Geld überweisen[5] \n edit value[6] \n Kunden Liste[7] \n Zinssatz ändern[8] \n ");
-        Kontofunktionen kontofunktionen = static_cast<Kontofunktionen>(acitivity);
+            int acitivity = User_Input<int>(" Bargeld[1] \n Kontostand[2] \n Geld abheben[3] \n Geld einzahlen[4] \n Geld überweisen[5] \n edit value[6] \n Kunden Liste[7] \n Zinssatz ändern[8] \n ");
+            Kontofunktionen kontofunktionen = static_cast<Kontofunktionen>(acitivity);
 
-        switch (kontofunktionen){
-            case Kontofunktionen::Bargeld: {
-                a.Bargeld();
-                Konto(username,kontoart);
-                break;
-            }
-            case Kontofunktionen::Kontostand: {
-                a.Kontostand();
-                Konto(username,kontoart);
-                break;
-            }
-            case Kontofunktionen::Geld_abheben:{
-                double Geld = User_Input<double>("Wie viel Geld willst du abheben ? ");
-                a.Geld_abheben(Geld);
-                Konto(username,kontoart);
-                break;
-            }
-            case Kontofunktionen::Geld_einzahlen:{
-                double Geld = User_Input<double>("Wie viel Geld willst du einzahlen ? ");
-                a.Geld_einzahlen(Geld);
-                Konto(username,kontoart);
-                break;
-            }
-            case Kontofunktionen::Überweisen:{
-                double Geld;
-                std::string empfänger_name = User_Input<std::string>("An welchen Kunden(Name_ID) möchtest du Geld überweisen ? ");
-                if (Kunden.find(empfänger_name)!=Kunden.end()){
-                    Kunde k_em = Kunden[empfänger_name];
-                    Geld = User_Input<double>("Wie viel Geld möchtest du überweisen ? ");
-                    a.überweisen(Kunden,k_em,Geld);
+            switch (kontofunktionen){
+                case Kontofunktionen::Bargeld: {
+                    a.Bargeld();
+                    break;
                 }
-                else{
-                    std::cout<<"Bitte gib einen Gültigen Empfänger ein. Der Empfänger muss ein Kunde sein!"<<std::endl;
+                case Kontofunktionen::Kontostand: {
+                    a.Kontostand();
+                    break;
                 }
-                Konto(username,kontoart);
-                break;
+                case Kontofunktionen::Geld_abheben:{
+                    double Geld = User_Input<double>("Wie viel Geld willst du abheben ? ");
+                    a.Geld_abheben(Geld);
+                    break;
+                }
+                case Kontofunktionen::Geld_einzahlen:{
+                    double Geld = User_Input<double>("Wie viel Geld willst du einzahlen ? ");
+                    a.Geld_einzahlen(Geld);
+                    break;
+                }
+                case Kontofunktionen::Überweisen:{
+                    double Geld;
+                    std::string empfänger_name = User_Input<std::string>("An welchen Kunden(Name_ID) möchtest du Geld überweisen ? ");
+                    if (ks.find(empfänger_name)!=ks.end()){
+                        Kunde k_em = ks[empfänger_name];
+                        Geld = User_Input<double>("Wie viel Geld möchtest du überweisen ? ");
+                        a.überweisen(ks,k_em,Geld);
+                    }
+                    else{
+                        std::cout<<"Bitte gib einen Gültigen Empfänger ein. Der Empfänger muss ein Kunde sein!"<<std::endl;
+                    }
+                    break;
+                }
+                case Kontofunktionen::edit_val:{
+                    double Geld = User_Input<double>("Wie viel Geld soll auf deinem Konto sein ? ");
+                    a.edit_value(Geld);
+                    break;
+                }
+                case Kontofunktionen::Kunden_liste:{
+                    a.Kunden_liste(ks);
+                    break;
+                }
+                case Kontofunktionen::edit_zins:{
+                    double Zinssatz = User_Input<double>("Wie hoch soll der Zinssatz sein ? ");
+                    a.edit_zins(Zinssatz,Zins);
+                    break;
+                }
+                default:
+                    return;
+                    break;
             }
-            case Kontofunktionen::edit_val:{
-                double Geld = User_Input<double>("Wie viel Geld soll auf deinem Konto sein ? ");
-                a.edit_value(Geld);
-                Konto(username,kontoart);
-                break;
-            }
-            case Kontofunktionen::Kunden_liste:{
-                a.Kunden_liste(Kunden);
-                Konto(username,kontoart);
-                break;
-            }
-            case Kontofunktionen::edit_zins:{
-                double Zinssatz = User_Input<double>("Wie hoch soll der Zinssatz sein ? ");
-                a.edit_zins(Zinssatz);
-                Konto(username,kontoart);
-                break;
-            }
-            default:
-                return;
-                break;
         }
     }
 }
 
-void login(){
+void login(std::unordered_map<std::string,Kunde>& ks, std::unordered_map<std::string,Admin>& ka, double& Zins){
     Kontoart kontoart = UI_Kontoart();
     std::string username = User_Input<std::string>("Name_ID: ");
     std::string password;
 
     switch(kontoart){
         case Kontoart::Standard:{
-            if(Kunden.find(username) != Kunden.end()){
+            if(ks.find(username) != ks.end()){
                 password = User_Input<std::string>("Password: ");
-                if(correct_Password(password,username,kontoart)){
-                    Konto(username,kontoart);
+                if(correct_Password(password,username,kontoart,ks,ka)){
+                    Konto(username,kontoart,ks,ka,Zins);
                 }
                 else{
                     std::cout<<"Das Passwort ist falsch"<<std::endl;
@@ -501,10 +477,10 @@ void login(){
             break;
         }
         case Kontoart::Admin:{
-            if(Admins.find(username) != Admins.end()){
+            if(ka.find(username) != ka.end()){
                 password = User_Input<std::string>("Password: ");
-                if(correct_Password(password,username,kontoart)){
-                    Konto(username,kontoart);
+                if(correct_Password(password,username,kontoart,ks,ka)){
+                    Konto(username,kontoart,ks,ka,Zins);
                 }
                 else{
                     std::cout<<"Das Passwort ist falsch"<<std::endl;
@@ -524,15 +500,26 @@ void login(){
 
 int main(){
     SetConsoleOutputCP(CP_UTF8);
-    laden(Kunden,Admins,Zins,start_purse,start_account);
+    
+    double start_Zins;
+    double start_purse;
+    double start_account;
+    
+    int last_ID=0;
+    std::unordered_map<std::string, Kunde> Kunden;
+    std::unordered_map<std::string, Admin> Admins;
+    std::string Admin_salt = "f=w@;zLL!0cdz}t>";
+    std::string Admin_hash = "ce3ca1b9a01343676efa74af881d940d8327dd9589e4e2f8410fa03a29a495e0";
+
+    laden(Kunden,Admins,start_Zins,start_purse,start_account,last_ID);
     std::string programm;
     while(true){
         programm = User_Input<std::string>("Möchtest du dich einloggen[1], ein neues Konto erstellen[2] oder die Simulation verlassen[q] ? ");
         if (programm=="1"){
-            login();
+            login(Kunden,Admins,start_Zins);
         }
         else if (programm=="2"){
-            Konto_erstellen();
+            Konto_erstellen(Kunden,Admins,start_purse,start_account,last_ID,Admin_salt,Admin_hash);
         }
         else if (programm=="q"){
             break;
@@ -541,6 +528,6 @@ int main(){
             std::cout<<"Keine gültige eingabe, Versuch es nochmal oder drücke [q] zum verlassen."<<std::endl;
         }
     }
-    speichern(Kunden,Admins,Zins,start_purse,start_account);
+    speichern(Kunden,Admins,start_Zins,start_purse,start_account);
     return 0;
 }
